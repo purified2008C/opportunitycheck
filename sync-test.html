@@ -1,0 +1,186 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpportunityCheck Temporary Sync Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 650px;
+      margin: 25px auto;
+      padding: 16px;
+      line-height: 1.5;
+      background: #f5f7fa;
+      color: #18212f;
+    }
+    main {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+    }
+    label {
+      display: block;
+      margin-top: 14px;
+      font-weight: bold;
+    }
+    input, textarea, button {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 12px;
+      margin-top: 6px;
+      font-size: 15px;
+    }
+    button {
+      cursor: pointer;
+      border: 0;
+      border-radius: 7px;
+      background: #087f5b;
+      color: white;
+      font-weight: bold;
+    }
+    .secondary { background: #39465c; }
+    #status {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      margin-top: 16px;
+    }
+    .warning {
+      background: #fff3cd;
+      padding: 10px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h2>OpportunityCheck — Temporary Sync Test</h2>
+  <p class="warning">
+    Temporary private-use tool. Never share your password or access
+    token. Do not enter a service-role or secret API key.
+  </p>
+
+  <form id="loginForm">
+    <label for="projectUrl">Supabase Project URL</label>
+    <input id="projectUrl"
+      value="https://hkvpgxhpyhpubxdjddtm.supabase.co"
+      required>
+
+    <label for="apiKey">Publishable API Key</label>
+    <input id="apiKey" placeholder="sb_publishable_..."
+      autocomplete="off" required>
+
+    <label for="email">Supabase account email</label>
+    <input id="email" type="email"
+      autocomplete="username" required>
+
+    <label for="password">Supabase account password</label>
+    <input id="password" type="password"
+      autocomplete="current-password" required>
+
+    <button type="submit">Sign in and Get Session Token</button>
+  </form>
+
+  <div id="status" role="status"></div>
+
+  <section id="tokenSection" hidden>
+    <label for="token">User Session Access Token</label>
+    <textarea id="token" rows="6" readonly></textarea>
+    <button id="copyButton" type="button">Copy Session Token</button>
+    <p>
+      Copy this token on your device. In Supabase's function tester,
+      set Authorization to: Bearer followed by one space and the token.
+    </p>
+    <button id="clearButton" class="secondary" type="button">
+      Clear Token and Sign Out
+    </button>
+  </section>
+</main>
+
+<script type="module">
+  import { createClient } from
+    "https://esm.sh/@supabase/supabase-js@2";
+
+  const form = document.getElementById("loginForm");
+  const statusBox = document.getElementById("status");
+  const tokenSection = document.getElementById("tokenSection");
+  const tokenBox = document.getElementById("token");
+  const passwordBox = document.getElementById("password");
+  const copyButton = document.getElementById("copyButton");
+  const clearButton = document.getElementById("clearButton");
+
+  let supabase = null;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    statusBox.textContent = "Signing in...";
+    tokenSection.hidden = true;
+    tokenBox.value = "";
+
+    try {
+      const projectUrl =
+        document.getElementById("projectUrl").value.trim().replace(/\/+$/, "");
+      const apiKey = document.getElementById("apiKey").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const password = passwordBox.value;
+
+      if (!projectUrl.startsWith("https://") ||
+          !apiKey.startsWith("sb_publishable_")) {
+        throw new Error("Check the project URL and publishable API key.");
+      }
+
+      supabase = createClient(projectUrl, apiKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false
+        }
+      });
+
+      const { data, error } =
+        await supabase.auth.signInWithPassword({ email, password });
+
+      passwordBox.value = "";
+
+      if (error) throw error;
+      if (!data.session?.access_token) {
+        throw new Error("Sign-in returned no access token.");
+      }
+
+      tokenBox.value = data.session.access_token;
+      tokenSection.hidden = false;
+      statusBox.textContent =
+        "Sign-in successful. Copy the token into the Supabase function tester. " +
+        "Do not send the token to anyone.";
+    } catch (error) {
+      passwordBox.value = "";
+      statusBox.textContent =
+        "Sign-in failed: " + (error?.message || "Unknown error");
+    }
+  });
+
+  copyButton.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(tokenBox.value);
+      statusBox.textContent =
+        "Token copied. Paste it only into your Supabase function tester.";
+    } catch {
+      tokenBox.focus();
+      tokenBox.select();
+      statusBox.textContent =
+        "Automatic copy failed. Long-press the selected token and choose Copy.";
+    }
+  });
+
+  clearButton.addEventListener("click", async () => {
+    tokenBox.value = "";
+    tokenSection.hidden = true;
+    if (supabase) await supabase.auth.signOut();
+    supabase = null;
+    statusBox.textContent =
+      "Token cleared from the page. Close this temporary page when finished.";
+  });
+</script>
+</body>
+</html>
